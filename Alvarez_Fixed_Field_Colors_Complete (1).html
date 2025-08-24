@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Alvarez Funeral Home — Case Management System</title>
+  <style>
+  :root{
+    --bg:#f0fdf4; --bg2:#ffffff; --card:#ffffff; --accent:#065f46; --accent2:#0ea5e9; --text:#111827; --muted:#475569; --error:#dc2626; --ok:#16a34a; --border:#e5e7eb; --border-strong:#cbd5e1; --shadow:0 6px 20px rgba(0,0,0,.08);
+    --sage-light:#f0fdf4; --forest-green:#065f46; --soft-blue:#0ea5e9; --green-light:#dcfce7; --red-light:#fef2f2;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0; font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; color:var(--text); background:var(--sage-light)}
+
+  .center-wrap{min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px}
+  .card{background:var(--card); border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow); padding:24px; width:min(1200px, 96vw)}
+  h1,h2{margin:0 0 12px; color:var(--forest-green)}
+  .sub{color:var(--muted); margin:0 0 18px}
+  .row{display:flex; gap:12px; flex-wrap:wrap}
+  .field{display:flex; flex-direction:column; gap:6px}
+  .field.flex1{flex:1}
+  label{font-size:12px; color:var(--muted); font-weight:600}
+  
+  input[type="text"], input[type="password"], input[type="week"], input[type="number"], input[type="date"], input[type="time"], select, textarea{
+    background:#fff; color:var(--text); border:1px solid var(--border-strong); border-radius:10px; padding:10px 12px; outline:none; min-height:40px; transition:all 0.3s ease;
+  }
+  
+  /* Field color indicators */
+  .field-empty {
+    background:var(--red-light) !important; border-color:#fca5a5 !important;
+  }
+  .field-filled {
+    background:var(--green-light) !important; border-color:#86efac !important;
+  }
+  
+  textarea{min-height:60px; resize:vertical}
+  input:focus, select:focus, textarea:focus{border-color:var(--accent)}
+  .btn{appearance:none; border:none; padding:12px 16px; border-radius:10px; cursor:pointer; font-weight:700; transition:all 0.3s ease}
+  .btn-primary{background:var(--forest-green); color:white}
+  .btn-primary:hover{background:#064e3b}
+  .btn-secondary{background:var(--soft-blue); color:white}
+  .btn-secondary:hover{background:#0284c7}
+  .btn-ghost{background:transparent; border:1px solid var(--border); color:var(--text)}
+  .btn-danger{background:#ef4444; color:white}
+  .actions{display:flex; gap:10px; align-items:center; justify-content:flex-end; margin-top:16px}
+  .pill{display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:999px; font-size:12px; border:1px solid var(--border); background:var(--green-light); color:var(--text)}
+
+  .toast{position:fixed; right:16px; bottom:16px; background:#111827; border:0; color:#fff; padding:12px 14px; border-radius:12px; opacity:0; transform:translateY(8px); transition:all .25s ease}
+  .toast.show{opacity:1; transform:translateY(0)}
+
+  .hidden{display:none !important}
+
+  .topbar{display:flex; align-items:center; justify-content:space-between; gap:12px; margin:16px 0 22px}
+  .brand{display:flex; align-items:center; gap:10px}
+  .brand .dot{width:12px; height:12px; border-radius:50%; background:linear-gradient(45deg, var(--forest-green), var(--soft-blue))}
+
+  .case-container{display:grid; grid-template-columns: repeat(2, minmax(520px, 1fr)); gap:16px}
+  @media (max-width:1120px){ .case-container{grid-template-columns: repeat(2, minmax(420px, 1fr));} }
+  @media (max-width:900px){ .case-container{grid-template-columns: 1fr 1fr;} }
+  @media (max-width:760px){ .case-container{grid-template-columns: 1fr;} }
+
+  .case-card{border:2px solid var(--border); border-radius:12px; background:#fff; padding:16px; box-shadow:var(--shadow); transition:all 0.3s ease}
+  .case-card.urgent{border-color:#ef4444; background:#fef2f2}
+  .case-card.warning{border-color:#f59e0b; background:#fefbf2}
+  .case-card.complete{border-color:var(--ok); background:var(--green-light)}
+  
+  .case-head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px}
+  .case-title{font-weight:800; color:var(--forest-green)}
+  .case-status{padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600}
+  .status-active{background:var(--green-light); color:var(--forest-green)}
+  .status-completed{background:#dbeafe; color:var(--soft-blue)}
+  .status-archived{background:#f3f4f6; color:#6b7280}
+
+  .alert-badge{background:#ef4444; color:white; padding:2px 6px; border-radius:4px; font-size:10px; font-weight:600}
+  .countdown-timer{background:#f59e0b; color:white; padding:2px 6px; border-radius:4px; font-size:10px; font-weight:600; margin-left:4px}
+
+  .grid-3{display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; margin-bottom:12px}
+  .grid-2{display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:12px}
+
+  .section{margin-top:12px; padding-top:12px; border-top:1px dashed var(--border-strong)}
+  .section h4{margin:0 0 8px; color:var(--forest-green); font-size:14px; font-weight:700}
+
+  .checklist{display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:8px}
+  .check-item{display:flex; align-items:center; gap:8px; padding:4px 0}
+  .check-item input[type="checkbox"]{transform:scale(1.15); accent-color:var(--forest-green)}
+
+  .other-grid{display:grid; grid-template-columns: 1fr 120px 120px; gap:8px; align-items:center; margin-bottom:6px}
+  .other-grid.head{font-size:12px; color:var(--muted); font-weight:600; margin-bottom:8px}
+  .other-item{font-size:14px; font-weight:500}
+  .other-input{
+    background:#fff; border:1px solid var(--border-strong); border-radius:6px; height:32px; padding:4px 8px; outline:none; font-size:13px; transition:all 0.3s ease;
+  }
+  .other-input:focus{border-color:var(--accent)}
+  .other-input.field-empty{background:var(--red-light) !important; border-color:#fca5a5 !important}
+  .other-input.field-filled{background:var(--green-light) !important; border-color:#86efac !important}
+
+  .case-actions{display:flex; gap:6px; margin-top:8px}
+  .case-actions .btn{font-size:11px; padding:6px 10px}
+
+  .dashboard-alerts{background:var(--red-light); border:1px solid #fca5a5; border-radius:8px; padding:12px; margin-bottom:16px}
+  .dashboard-alerts.hidden{display:none}
+  .alert-text{color:#dc2626; font-weight:600; font-size:14px}
+
+  .toolbar{display:flex; gap:12px; align-items:center; margin-bottom:16px; flex-wrap:wrap}
+  .search-box{padding:8px 12px; border:1px solid var(--border-strong); border-radius:8px; min-width:200px}
+</style>
+</head>
+<body>
+  <!-- Setup View -->
+  <div id="setup-view" class="center-wrap hidden">
+    <div class="card">
+      <div class="brand"><span class="dot"></span><h2>First‑Time Setup</h2></div>
+      <p class="sub">Create Admin and Team accounts (stored securely in your browser only).</p>
+      <div class="row">
+        <div class="field flex1"><label>Admin username</label><input id="setup-admin-user" type="text" placeholder="admin" /></div>
+        <div class="field flex1"><label>Admin password</label><input id="setup-admin-pass" type="password" placeholder="Create password" /></div>
+      </div>
+      <div class="row">
+        <div class="field flex1"><label>Team member username</label><input id="setup-team-user" type="text" placeholder="team" /></div>
+        <div class="field flex1"><label>Team member password</label><input id="setup-team-pass" type="password" placeholder="Create password" /></div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" id="setup-save">Save & Continue</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Login View -->
+  <div id="login-view" class="center-wrap hidden">
+    <div class="card" style="max-width:520px">
+      <div class="brand"><span class="dot"></span><h2>Sign in</h2></div>
+      <p class="sub">Use your Admin or Team credentials.</p>
+      <div class="field"><label>Username</label><input id="login-user" type="text" autocomplete="username" placeholder="Enter username" /></div>
+      <div class="field"><label>Password</label><input id="login-pass" type="password" autocomplete="current-password" placeholder="Enter password" /></div>
+      <div class="actions">
+        <button class="btn btn-ghost" id="go-to-setup">First‑time setup</button>
+        <button class="btn btn-primary" id="login-btn">Sign in</button>
+      </div>
+      <p class="sub" id="login-error" style="color:var(--error); display:none; margin-top:8px">Invalid username or password.</p>
+      <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap">
+        <button class="btn btn-ghost" id="reset-app">Reset app data</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dashboard View -->
+  <div id="dashboard-view" class="center-wrap hidden">
+    <div class="card">
+      <div class="topbar">
+        <div class="brand"><span class="dot"></span><h2>Alvarez Funeral Home — Case Management</h2></div>
+        <div class="menu">
+          <span class="pill">Signed in as <strong id="whoami-name"></strong> (<span id="whoami-role"></span>)</span>
+          <button class="btn btn-ghost" id="btn-change-me">Change Password</button>
+          <button class="btn btn-ghost hidden" id="btn-manage-users">Manage Users</button>
+          <button class="btn btn-danger" id="btn-logout">Logout</button>
+        </div>
+      </div>
+
+      <div id="dashboard-alerts" class="dashboard-alerts hidden">
+        <div class="alert-text" id="alert-text"></div>
+      </div>
+
+      <div class="toolbar">
+        <div class="field"><label>Week of</label><input type="week" id="week-input" /></div>
+        <div class="field"><label>Year</label><input type="number" id="year-input" min="2020" max="2100" value="2025"/></div>
+        <button class="btn btn-primary" id="add-case-btn">Add New Case</button>
+        <button class="btn btn-secondary" id="carry-forward-btn">Carry Forward Active Cases</button>
+        <div class="field">
+          <label>Filter</label>
+          <select id="status-filter">
+            <option value="all">All Cases</option>
+            <option value="active">Active</option>
+            <option value="completed">Completed</option>
+            <option value="archived">Archived</option>
+          </select>
+        </div>
+        <input type="text" id="search-box" class="search-box" placeholder="Search by client name..." />
+      </div>
+
+      <div class="case-container" id="case-grid"><!-- dynamic --></div>
+    </div>
+  </div>
+
+  <!-- Modals -->
+  <div id="modal-change" class="modal hidden" role="dialog" aria-modal="true" style="position:fixed; inset:0; background:rgba(7,8,18,.65); display:flex; align-items:center; justify-content:center; z-index:1000">
+    <div class="card" style="width:min(560px,92vw)">
+      <h2>Change My Password</h2>
+      <div class="row">
+        <div class="field flex1"><label>Current password</label><input id="me-old" type="password" /></div>
+        <div class="field flex1"><label>New password</label><input id="me-new" type="password" /></div>
+        <div class="field flex1"><label>Confirm new password</label><input id="me-new2" type="password" /></div>
+      </div>
+      <div class="actions"><button class="btn btn-ghost" onclick="hide('#modal-change')">Cancel</button><button class="btn btn-primary" id="me-save">Save</button></div>
+      <p class="sub" id="me-msg" style="margin-top:8px"></p>
+    </div>
+  </div>
+
+  <div id="modal-manage" class="modal hidden" role="dialog" aria-modal="true" style="position:fixed; inset:0; background:rgba(7,8,18,.65); display:flex; align-items:center; justify-content:center; z-index:1000">
+    <div class="card" style="width:min(560px,92vw)">
+      <h2>Manage Users</h2>
+      <div class="row">
+        <div class="field flex1"><label>Admin username</label><input id="admin-username" type="text" /></div>
+        <div class="field flex1"><label>Team username</label><input id="team-username" type="text" /></div>
+      </div>
+      <div class="row">
+        <div class="field flex1"><label>Reset Admin password (optional)</label><input id="admin-reset-pass" type="password" placeholder="Leave blank to keep" /></div>
+        <div class="field flex1"><label>Reset Team password (optional)</label><input id="team-reset-pass" type="password" placeholder="Leave blank to keep" /></div>
+      </div>
+      <div class="actions"><button class="btn btn-ghost" onclick="hide('#modal-manage')">Close</button><button class="btn btn-primary" id="manage-save">Save Changes</button></div>
+      <p class="sub" id="manage-msg" style="margin-top:8px"></p>
+    </div>
+  </div>
+
+  <div id="toast" class="toast">Saved.</div>
+
+  <script>
+    // ------------------ Auth & Utilities ------------------
+    const LS_USERS = 'AFH_users_v2';
+    const LS_SESSION = 'AFH_session_v2';
+
+    const $ = (sel, root=document) => root.querySelector(sel);
+    const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+    const show = sel => $(sel).classList.remove('hidden');
+    const hide = sel => $(sel).classList.add('hidden');
+
+    function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 1600); }
+
+    async function sha256Hex(str){
+      const enc = new TextEncoder().encode(str);
+      const buf = await crypto.subtle.digest('SHA-256', enc);
+      return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+    }
+
+    function getUsers(){ const raw = localStorage.getItem(LS_USERS); if(!raw) return null; try{ return JSON.parse(raw);}catch{ return null; } }
+    function setUsers(users){ localStorage.setItem(LS_USERS, JSON.stringify(users)); }
+    function getSession(){ const raw = localStorage.getItem(LS_SESSION); if(!raw) return null; try{return JSON.parse(raw);}catch{return null} }
+    function setSession(s){ localStorage.setItem(LS_SESSION, JSON.stringify(s)); }
+    function clearSession(){ localStorage.removeItem(LS_SESSION); }
+    function go(view){ hide('#setup-view'); hide('#login-view'); hide('#dashboard-view'); show(view); }
+
+    const who = () => (getSession()?.username || 'guest');
+    const k = (...parts) => `AFH_${who()}_${parts.join('_')}`;
+
+    // ------------------ Field Definitions ------------------
+    const PRIMARY_FIELDS = [
+      {key:'client_name', label:'Name', type:'text', required:true},
+      {key:'date1', label:'Date 1', type:'date', required:true},
+      {key:'start_time1', label:'Start Time 1', type:'time'},
+      {key:'end_time1', label:'End Time 1', type:'time'},
+      {key:'date2', label:'Date 2', type:'date'},
+      {key:'start_time2', label:'Start Time 2', type:'time'},
+      {key:'end_time2', label:'End Time 2', type:'time'},
+      {key:'date3', label:'Date 3', type:'date'},
+      {key:'start_time3', label:'Start Time 3', type:'time'},
+      {key:'end_time3', label:'End Time 3', type:'time'},
+      {key:'edrs_no', label:'EDRS #', type:'text'},
+    ];
+
+    const CASE_DETAIL_FIELDS = [
+      {key:'file_no', label:'File #', type:'text'},
+      {key:'medicaid', label:'Medicaid', type:'select', options:['','No','Pending','Yes']},
+      {key:'service', label:'Service', type:'select', options:['','Cremation','Burial']},
+      {key:'chapel', label:'Chapel', type:'text'},
+      {key:'cemetery', label:'Cemetery', type:'text'},
+      {key:'church', label:'Church', type:'text'},
+      {key:'casket', label:'Casket', type:'text'},
+      {key:'vault', label:'Vault', type:'text'},
+    ];
+
+    const FORMS = [
+      'FTC Disclosure w/ GPL','Consent for Services','Transfer Authorization','Cremation Consent','Payment Agreement','Cremation Authorization','NYC Cremation Permit','Burial Forms','Medicaid Resource'
+    ];
+
+    const OTHER = [
+      'Casket Order','Church / Priest','Vault Order','Prayer Cards','TV Board/Slideshow','Logbook','Abstract','Work Excuse','Obituary','Grave Marker','VA/Flag','Cars','Transcripts','Shipping','Burial Transit Permit','Translations','Apostilles','Flight','Clothes'
+    ];
+
+    const PAY_FIELDS = [
+      {key:'pay_total', label:'Contract Total ($)', type:'number'},
+      {key:'pay_paid', label:'Paid to Date ($)', type:'number'},
+      {key:'pay_balance', label:'Balance ($)', type:'number', readonly:true},
+      {key:'pay_method', label:'Payment Method', type:'select', options:['','Cash','Check','Card','Insurance Assignment','Medicaid','Other']},
+      {key:'pay_payer', label:'Payer Name', type:'text'},
+      {key:'pay_notes', label:'Payment Notes', type:'textarea'},
+    ];
+
+    let caseIdCounter = 12;
+    const INITIAL_CASES = [
+      {id:'001', service:'Cremation', status:'active'},
+      {id:'002', service:'Burial', status:'active'},
+      {id:'003', service:'Cremation', status:'active'},
+      {id:'004', service:'Burial', status:'active'},
+      {id:'005', service:'Cremation', status:'active'},
+      {id:'006', service:'Burial', status:'active'},
+      {id:'007', service:'Cremation', status:'active'},
+      {id:'008', service:'Burial', status:'active'},
+      {id:'009', service:'Cremation', status:'active'},
+      {id:'010', service:'Burial', status:'active'},
+      {id:'011', service:'Cremation', status:'active'},
+      {id:'012', service:'Burial', status:'active'},
+    ];
+
+    // ------------------ Field Color Management ------------------
+    function updateFieldColor(element) {
+      if (!element) return;
+      
+      const isEmpty = !element.value || element.value.trim() === '';
+      
+      element.classList.remove('field-empty', 'field-filled');
+      
+      if (isEmpty) {
+        element.classList.add('field-empty');
+      } else {
+        element.classList.add('field-filled');
+      }
+    }
+
+    function initializeFieldColors(container) {
+      const allInputs = container.querySelectorAll('input[type="text"], input[type="number"], input[type="date"], input[type="time"], select, textarea');
+      
+      allInputs.forEach(input => {
+        updateFieldColor(input);
+        
+        input.addEventListener('input', () => updateFieldColor(input));
+        input.addEventListener('change', () => updateFieldColor(input));
+        input.addEventListener('blur', () => updateFieldColor(input));
+      });
+      
+      // Special handling for Others section inputs
+      const otherInputs = container.querySelectorAll('.other-input');
+      otherInputs.forEach(input => {
+        updateFieldColor(input);
+        
+        input.addEventListener('input', () => updateFieldColor(input));
+        input.addEventListener('change', () => updateFieldColor(input));
+        input.addEventListener('blur', () => updateFieldColor(input));
+      });
+    }
+
+    // ------------------ Alert System ------------------
+    function checkCaseAlerts() {
+      const now = new Date();
+      let urgentCases = 0;
+      let alertMessages = [];
+
+      INITIAL_CASES.forEach(c => {
+        const date1 = loadField(c.id, 'date1');
+        if (!date1) return;
+
+        const serviceDate = new Date(date1);
+        const timeDiff = serviceDate - now;
+        const hoursUntil = timeDiff / (1000 * 60 * 60);
+
+        if (hoursUntil > 0 && hoursUntil <= 24) {
+          const clothesData = loadField(c.id, 'oth_created_clothes') || loadField(c.id, 'oth_confirmed_clothes');
+          const paymentData = loadField(c.id, 'pay_total') || loadField(c.id, 'pay_method');
+          const clientName = loadField(c.id, 'client_name') || `Case ${c.id}`;
+
+          if (!clothesData || !paymentData) {
+            urgentCases++;
+            const missing = [];
+            if (!clothesData) missing.push('clothes');
+            if (!paymentData) missing.push('payment');
+            alertMessages.push(`${clientName} - Missing: ${missing.join(', ')} (Service in ${Math.round(hoursUntil)}h)`);
+          }
+        }
+      });
+
+      const alertDiv = $('#dashboard-alerts');
+      const alertText = $('#alert-text');
+
+      if (urgentCases > 0) {
+        alertText.innerHTML = `⚠️ ${urgentCases} case(s) need attention:<br>${alertMessages.join('<br>')}`;
+        alertDiv.classList.remove('hidden');
+      } else {
+        alertDiv.classList.add('hidden');
+      }
+    }
+
+    // ------------------ Case Management ------------------
+    function loadField(caseId, key){ 
+      const value = localStorage.getItem(k('case',caseId,'field',key));
+      return value === null ? '' : value;
+    }
+    
+    function saveField(caseId, key, val){ 
+      localStorage.setItem(k('case',caseId,'field',key), val || ''); 
+      checkCaseAlerts();
+    }
+    
+    function loadCheck(caseId, key){ 
+      return localStorage.getItem(k('case',caseId,'chk',key)) === 'true'; 
+    }
+    
+    function saveCheck(caseId, key, val){ 
+      localStorage.setItem(k('case',caseId,'chk',key), !!val); 
+    }
+
+    function getCaseStatus(caseId) {
+      return localStorage.getItem(k('case', caseId, 'status')) || 'active';
+    }
+
+    function setCaseStatus(caseId, status) {
+      localStorage.setItem(k('case', caseId, 'status'), status);
+    }
+
+    function deleteCase(caseId) {
+      if (!confirm('Delete this case permanently? This cannot be undone.')) return;
+      
+      // Remove all data for this case
+      const keys = Object.keys(localStorage);
+      keys.forEach(key => {
+        if (key.includes(`AFH_${who()}_case_${caseId}_`)) {
+          localStorage.removeItem(key);
+        }
+      });
+      
+      // Remove from INITIAL_CASES
+      const index = INITIAL_CASES.findIndex(c => c.id === caseId);
+      if (index !== -1) {
+        INITIAL_CASES.splice(index, 1);
+      }
+      
+      renderCases();
+      toast('Case deleted');
+    }
+
+    function addNewCase() {
+      caseIdCounter++;
+      const newId = String(caseIdCounter).padStart(3, '0');
+      
+      INITIAL_CASES.push({
+        id: newId,
+        service: '',
+        status: 'active'
+      });
+      
+      renderCases();
+      toast('New case added');
+    }
+
+    // ------------------ Rendering ------------------
+    function renderCases() {
+      const grid = $('#case-grid');
+      grid.innerHTML = '';
+      
+      const filter = $('#status-filter').value;
+      const search = $('#search-box').value.toLowerCase();
+      
+      let filteredCases = INITIAL_CASES.filter(c => {
+        const status = getCaseStatus(c.id);
+        const name = (loadField(c.id, 'client_name') || '').toLowerCase();
+        
+        const statusMatch = filter === 'all' || status === filter;
+        const searchMatch = !search || name.includes(search);
+        
+        return statusMatch && searchMatch;
+      });
+      
+      filteredCases.forEach(c => {
+        const caseCard = renderCaseCard(c);
+        grid.appendChild(caseCard);
+      });
+      
+      checkCaseAlerts();
+    }
+
+    function renderCaseCard(c) {
+      const card = document.createElement('div');
+      card.className = 'case-card';
+      card.id = `case${c.id}`;
+      
+      const status = getCaseStatus(c.id);
+      if (status === 'completed') card.classList.add('complete');
+      if (status === 'archived') card.classList.add('archived');
+      
+      // Check for urgency
+      const date1 = loadField(c.id, 'date1');
+      if (date1) {
+        const serviceDate = new Date(date1);
+        const now = new Date();
+        const hoursUntil = (serviceDate - now) / (1000 * 60 * 60);
+        
+        if (hoursUntil > 0 && hoursUntil <= 24) {
+          const clothesData = loadField(c.id, 'oth_created_clothes') || loadField(c.id, 'oth_confirmed_clothes');
+          const paymentData = loadField(c.id, 'pay_total') || loadField(c.id, 'pay_method');
+          
+          if (!clothesData || !paymentData) {
+            card.classList.add('urgent');
+          }
+        }
+      }
+
+      // Header
+      const head = document.createElement('div');
+      head.className = 'case-head';
+      head.innerHTML = `
+        <div class="case-title">Case ${c.id} — <span id="case${c.id}_titleName">${loadField(c.id,'client_name') || ''}</span></div>
+        <div>
+          <select class="case-status status-${status}" onchange="setCaseStatus('${c.id}', this.value); renderCases();">
+            <option value="active" ${status==='active'?'selected':''}>Active</option>
+            <option value="completed" ${status==='completed'?'selected':''}>Completed</option>
+            <option value="archived" ${status==='archived'?'selected':''}>Archived</option>
+          </select>
+        </div>
+      `;
+      card.appendChild(head);
+
+      // Primary Information Section
+      const primaryInfo = document.createElement('div');
+      primaryInfo.innerHTML = '<h4>Primary Information</h4>';
+      
+      const primaryGrid1 = document.createElement('div');
+      primaryGrid1.className = 'grid-3';
+      const primaryGrid2 = document.createElement('div');  
+      primaryGrid2.className = 'grid-3';
+      const primaryGrid3 = document.createElement('div');
+      primaryGrid3.className = 'grid-2';
+
+      PRIMARY_FIELDS.forEach((def, index) => {
+        const value = loadField(c.id, def.key);
+        const fieldEl = document.createElement('div');
+        fieldEl.className = 'field';
+        const id = `case${c.id}_${def.key}`;
+        
+        let inputHtml = '';
+        if (def.type === 'select') {
+          inputHtml = `<select id="${id}">${def.options.map(opt=>`<option ${String(value)===opt?'selected':''}>${opt}</option>`).join('')}</select>`;
+        } else {
+          inputHtml = `<input id="${id}" type="${def.type}" value="${value}">`;
+        }
+        
+        fieldEl.innerHTML = `<label>${def.label}</label>${inputHtml}`;
+        
+        if (index <= 3) primaryGrid1.appendChild(fieldEl);
+        else if (index <= 7) primaryGrid2.appendChild(fieldEl);
+        else primaryGrid3.appendChild(fieldEl);
+      });
+
+      primaryInfo.appendChild(primaryGrid1);
+      primaryInfo.appendChild(primaryGrid2);
+      primaryInfo.appendChild(primaryGrid3);
+      card.appendChild(primaryInfo);
+
+      // Case Details Section
+      const details = document.createElement('div');
+      details.className = 'section';
+      details.innerHTML = '<h4>Case Details</h4>';
+      
+      const detailsGrid1 = document.createElement('div');
+      detailsGrid1.className = 'grid-3';
+      const detailsGrid2 = document.createElement('div');
+      detailsGrid2.className = 'grid-2';
+
+      CASE_DETAIL_FIELDS.forEach((def, index) => {
+        const value = loadField(c.id, def.key) || (def.key === 'service' ? c.service : '');
+        const fieldEl = document.createElement('div');
+        fieldEl.className = 'field';
+        const id = `case${c.id}_${def.key}`;
+        
+        let inputHtml = '';
+        if (def.type === 'select') {
+          inputHtml = `<select id="${id}">${def.options.map(opt=>`<option ${String(value)===opt?'selected':''}>${opt}</option>`).join('')}</select>`;
+        } else {
+          inputHtml = `<input id="${id}" type="${def.type}" value="${value}">`;
+        }
+        
+        fieldEl.innerHTML = `<label>${def.label}</label>${inputHtml}`;
+        
+        if (index <= 2) detailsGrid1.appendChild(fieldEl);
+        else detailsGrid2.appendChild(fieldEl);
+      });
+
+      details.appendChild(detailsGrid1);
+      details.appendChild(detailsGrid2);
+      card.appendChild(details);
+
+      // Forms Section
+      const formsWrap = document.createElement('div');
+      formsWrap.className = 'section';
+      formsWrap.innerHTML = '<h4>Forms</h4>';
+      const listF = document.createElement('div');
+      listF.className = 'checklist';
+      
+      FORMS.forEach(label => {
+        const id = `case${c.id}_frm_${safeKey(label)}`;
+        const item = document.createElement('label');
+        item.className = 'check-item';
+        item.setAttribute('for', id);
+        item.innerHTML = `<input type="checkbox" id="${id}"><span>${label}</span>`;
+        listF.appendChild(item);
+      });
+      
+      formsWrap.appendChild(listF);
+      card.appendChild(formsWrap);
+
+      // Others Section
+      const otherWrap = document.createElement('div');
+      otherWrap.className = 'section';
+      otherWrap.innerHTML = '<h4>Others</h4>';
+      
+      const headRow = document.createElement('div');
+      headRow.className = 'other-grid head';
+      headRow.innerHTML = '<div>Item</div><div>Created</div><div>Confirmed</div>';
+      otherWrap.appendChild(headRow);
+      
+      OTHER.forEach(label => {
+        const key = safeKey(label);
+        const gridRow = document.createElement('div');
+        gridRow.className = 'other-grid';
+        gridRow.innerHTML = `
+          <div class="other-item">${label}</div>
+          <input class="other-input" id="case${c.id}_oth_created_${key}" type="text" />
+          <input class="other-input" id="case${c.id}_oth_confirmed_${key}" type="text" />
+        `;
+        otherWrap.appendChild(gridRow);
+      });
+      
+      card.appendChild(otherWrap);
+
+      // Payment Section
+      const payWrap = document.createElement('div');
+      payWrap.className = 'section';
+      payWrap.innerHTML = '<h4>Payment Information</h4>';
+      
+      const pTop = document.createElement('div');
+      pTop.className = 'grid-3';
+      const pMid = document.createElement('div');
+      pMid.className = 'grid-2';
+      const pNotes = document.createElement('div');
+
+      PAY_FIELDS.forEach(def => {
+        const id = `case${c.id}_${def.key}`;
+        const val = loadField(c.id, def.key);
+        const fld = document.createElement('div');
+        fld.className = 'field';
+        
+        let inputHtml = '';
+        if (def.type === 'select') {
+          inputHtml = `<select id="${id}">${def.options.map(opt=>`<option ${String(val)===opt?'selected':''}>${opt}</option>`).join('')}</select>`;
+        } else if (def.type === 'textarea') {
+          inputHtml = `<textarea id="${id}" placeholder="Payment notes...">${val}</textarea>`;
+        } else {
+          inputHtml = `<input id="${id}" type="${def.type}" ${def.readonly?'readonly':''} value="${val}">`;
+        }
+        
+        fld.innerHTML = `<label>${def.label}</label>${inputHtml}`;
+        
+        if (['pay_total','pay_paid','pay_balance'].includes(def.key)) pTop.appendChild(fld);
+        else if (['pay_method','pay_payer'].includes(def.key)) pMid.appendChild(fld);
+        else pNotes.appendChild(fld);
+      });
+
+      payWrap.appendChild(pTop);
+      payWrap.appendChild(pMid);
+      payWrap.appendChild(pNotes);
+      card.appendChild(payWrap);
+
+      // Notes Section
+      const notesWrap = document.createElement('div');
+      notesWrap.className = 'section';
+      notesWrap.innerHTML = `
+        <h4>Notes</h4>
+        <div class="field" style="margin-bottom:12px">
+          <label>Case Notes</label>
+          <textarea id="case${c.id}_notes" placeholder="Case notes...">${loadField(c.id,'notes')}</textarea>
+        </div>
+        <div class="field">
+          <label>Additional Notes</label>
+          <textarea id="case${c.id}_additional_notes" placeholder="Additional notes...">${loadField(c.id,'additional_notes')}</textarea>
+        </div>
+      `;
+      card.appendChild(notesWrap);
+
+      // Action buttons
+      const actionsDiv = document.createElement('div');
+      actionsDiv.className = 'case-actions';
+      actionsDiv.innerHTML = `
+        <button class="btn btn-danger" onclick="deleteCase('${c.id}')">Delete Case</button>
+        <button class="btn btn-ghost" onclick="transferCase('${c.id}')">Transfer to Week</button>
+      `;
+      card.appendChild(actionsDiv);
+
+      // Wire up the case
+      wireCase(card, c.id);
+      initializeFieldColors(card);
+
+      return card;
+    }
+
+    function safeKey(s) { 
+      return s.toLowerCase().replace(/[^a-z0-9]+/g,'_'); 
+    }
+
+    function wireCase(card, caseId) {
+      // Primary fields
+      PRIMARY_FIELDS.forEach(def => {
+        const el = card.querySelector(`#case${caseId}_${def.key}`);
+        if (!el) return;
+        
+        if (def.key === 'client_name') {
+          el.addEventListener('input', () => {
+            saveField(caseId, def.key, el.value);
+            const titleEl = card.querySelector(`#case${caseId}_titleName`);
+            if (titleEl) titleEl.textContent = el.value || '';
+            updateFieldColor(el);
+          });
+        } else {
+          el.addEventListener('input', () => {
+            saveField(caseId, def.key, el.value);
+            updateFieldColor(el);
+          });
+          el.addEventListener('change', () => {
+            saveField(caseId, def.key, el.value);
+            updateFieldColor(el);
+          });
+        }
+      });
+
+      // Case detail fields
+      CASE_DETAIL_FIELDS.forEach(def => {
+        const el = card.querySelector(`#case${caseId}_${def.key}`);
+        if (!el) return;
+        
+        el.addEventListener('input', () => {
+          saveField(caseId, def.key, el.value);
+          updateFieldColor(el);
+        });
+        el.addEventListener('change', () => {
+          saveField(caseId, def.key, el.value);
+          updateFieldColor(el);
+        });
+      });
+
+      // Forms checkboxes
+      FORMS.forEach(lbl => {
+        const id = `case${caseId}_frm_${safeKey(lbl)}`;
+        const cb = card.querySelector('#' + id);
+        if (!cb) return;
+        
+        const saved = loadCheck(caseId, 'frm_' + safeKey(lbl));
+        if (saved) cb.checked = true;
+        
+        cb.addEventListener('change', () => {
+          saveCheck(caseId, 'frm_' + safeKey(lbl), cb.checked);
+        });
+      });
+
+      // Others inputs
+      OTHER.forEach(lbl => {
+        ['created','confirmed'].forEach(col => {
+          const id = `case${caseId}_oth_${col}_${safeKey(lbl)}`;
+          const el = card.querySelector('#' + id);
+          if (!el) return;
+          
+          const key = `oth_${col}_${safeKey(lbl)}`;
+          const saved = loadField(caseId, key);
+          if (saved) el.value = saved;
+          
+          el.addEventListener('input', () => {
+            saveField(caseId, key, el.value);
+            updateFieldColor(el);
+          });
+          el.addEventListener('change', () => {
+            updateFieldColor(el);
+          });
+          el.addEventListener('blur', () => {
+            updateFieldColor(el);
+          });
+        });
+      });
+
+      // Payment fields
+      const payTotal = card.querySelector(`#case${caseId}_pay_total`);
+      const payPaid = card.querySelector(`#case${caseId}_pay_paid`);
+      const payBalance = card.querySelector(`#case${caseId}_pay_balance`);
+      
+      function recalcBalance() {
+        const t = parseFloat(payTotal?.value || '0');
+        const p = parseFloat(payPaid?.value || '0');
+        const b = (isFinite(t) && isFinite(p)) ? (t - p) : '';
+        if (payBalance) {
+          payBalance.value = (b === '') ? '' : String(b.toFixed(2));
+          saveField(caseId, 'pay_balance', payBalance.value);
+          updateFieldColor(payBalance);
+        }
+      }
+
+      PAY_FIELDS.forEach(def => {
+        const el = card.querySelector(`#case${caseId}_${def.key}`);
+        if (!el) return;
+        
+        if (def.key === 'pay_total' || def.key === 'pay_paid') {
+          el.addEventListener('input', () => {
+            saveField(caseId, def.key, el.value);
+            recalcBalance();
+            updateFieldColor(el);
+          });
+        } else if (def.key !== 'pay_balance') {
+          el.addEventListener('input', () => {
+            saveField(caseId, def.key, el.value);
+            updateFieldColor(el);
+          });
+          el.addEventListener('change', () => {
+            saveField(caseId, def.key, el.value);
+            updateFieldColor(el);
+          });
+        }
+      });
+
+      recalcBalance();
+
+      // Notes
+      ['notes', 'additional_notes'].forEach(noteType => {
+        const el = card.querySelector(`#case${caseId}_${noteType}`);
+        if (!el) return;
+        
+        el.addEventListener('input', () => {
+          saveField(caseId, noteType, el.value);
+          updateFieldColor(el);
+          el.style.height = 'auto';
+          el.style.height = Math.min(el.scrollHeight, 300) + 'px';
+        });
+      });
+    }
+
+    function transferCase(caseId) {
+      const newWeek = prompt('Enter target week (YYYY-WXX format):');
+      if (newWeek) {
+        toast(`Case ${caseId} transferred to ${newWeek}`);
+      }
+    }
+
+    function carryForwardActiveCases() {
+      let count = 0;
+      INITIAL_CASES.forEach(c => {
+        if (getCaseStatus(c.id) === 'active') {
+          count++;
+        }
+      });
+      
+      if (count > 0) {
+        toast(`${count} active cases carried forward`);
+      } else {
+        toast('No active cases to carry forward');
+      }
+    }
+
+    // ------------------ App Boot & Auth ------------------
+    async function firstRun() {
+      const users = getUsers();
+      if (!users) { 
+        go('#setup-view'); 
+        return; 
+      }
+      
+      const session = getSession();
+      if (session) { 
+        enterDashboard(session); 
+      } else { 
+        go('#login-view'); 
+      }
+    }
+
+    $('#setup-save').addEventListener('click', async () => {
+      const adminUser = $('#setup-admin-user').value.trim() || 'admin';
+      const adminPass = $('#setup-admin-pass').value;
+      const teamUser = $('#setup-team-user').value.trim() || 'team';
+      const teamPass = $('#setup-team-pass').value;
+      
+      if (!adminPass || !teamPass) { 
+        toast('Both passwords are required.'); 
+        return; 
+      }
+      if (adminPass.length < 6 || teamPass.length < 6) { 
+        toast('Passwords must be at least 6 characters.'); 
+        return; 
+      }
+      
+      const users = [
+        { role:'admin', username: adminUser, passHash: await sha256Hex(adminPass) },
+        { role:'team', username: teamUser, passHash: await sha256Hex(teamPass) }
+      ];
+      
+      setUsers(users);
+      setSession({ username: adminUser, role: 'admin' });
+      enterDashboard({ username: adminUser, role: 'admin' });
+    });
+
+    $('#login-btn').addEventListener('click', async () => {
+      const username = $('#login-user').value.trim().toLowerCase();
+      const password = $('#login-pass').value;
+      const users = getUsers();
+      
+      if (!users) { 
+        $('#login-error').style.display = 'block'; 
+        return; 
+      }
+      
+      const user = users.find(u => u.username.toLowerCase() === username);
+      if (!user || user.passHash !== await sha256Hex(password)) {
+        $('#login-error').style.display = 'block';
+        return;
+      }
+      
+      const session = { username: user.username, role: user.role };
+      setSession(session);
+      enterDashboard(session);
+    });
+
+    $('#go-to-setup').addEventListener('click', () => go('#setup-view'));
+    $('#reset-app').addEventListener('click', () => {
+      if (confirm('Reset all app data? This cannot be undone.')) {
+        localStorage.clear();
+        location.reload();
+      }
+    });
+
+    function enterDashboard(session) {
+      go('#dashboard-view');
+      $('#whoami-name').textContent = session.username;
+      $('#whoami-role').textContent = session.role;
+      
+      if (session.role === 'admin') {
+        $('#btn-manage-users').classList.remove('hidden');
+      }
+      
+      // Set current week
+      const now = new Date();
+      const year = now.getFullYear();
+      const week = Math.ceil(((now - new Date(year, 0, 1)) / 86400000 + 1) / 7);
+      $('#week-input').value = `${year}-W${String(week).padStart(2, '0')}`;
+      $('#year-input').value = year;
+      
+      renderCases();
+    }
+
+    $('#btn-logout').addEventListener('click', () => {
+      clearSession();
+      go('#login-view');
+    });
+
+    $('#btn-change-me').addEventListener('click', () => show('#modal-change'));
+
+    $('#add-case-btn').addEventListener('click', addNewCase);
+    $('#carry-forward-btn').addEventListener('click', carryForwardActiveCases);
+    
+    $('#status-filter').addEventListener('change', renderCases);
+    $('#search-box').addEventListener('input', renderCases);
+
+    // Initialize
+    firstRun();
+  </script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/vcd15cbe7772f49c399c6a5babf22c1241717689176015" integrity="sha512-ZpsOmlRQV6y907TI0dKBHq9Md29nnaEIPlkf84rnaERnq6zvWvPUqr2ft8M1aS28oN72PdrCzSjY4U6VaAw1EQ==" data-cf-beacon='{"rayId":"9742b87d6fefdc28","serverTiming":{"name":{"cfExtPri":true,"cfEdge":true,"cfOrigin":true,"cfL4":true,"cfSpeedBrain":true,"cfCacheStatus":true}},"version":"2025.8.0","token":"4edd5f8ec12a48cfa682ab8261b80a79"}' crossorigin="anonymous"></script>
+</body>
+</html>
+    <script id="html_badge_script1">
+        window.__genspark_remove_badge_link = "https://www.genspark.ai/api/html_badge/" +
+            "remove_badge?token=To%2FBnjzloZ3UfQdcSaYfDj8VTQqAmaxlrn5lMB%2BNo5jjj4zcpmR1%2BowKOkS2r461FJ%2BYRwtVOIZuL%2BssXFBwLsSnR9n0QtbO6nVh9mEE16uFt2InOm%2F2xnov0SL4Opd9g1%2BBPFJuk0Xuzl%2FmbXLFS0Rv5wBCALChzm8g66Vv2m2ms%2BIAlhRgxETvTwmK31zCmKowHcdI7hajYJ%2B6ZMBZESjYZApjZyr5S%2FmM0wn8ZFPkDHtMScvBeaQ9JOOjpnxNXtZQeVsBkvRXRgrC%2FJNSV6lSiAJ3ohKyBXvjVfFUfUAXRk%2BMY8pttUKGi3v%2BxDDFvEMlLiQd5uUTvxFSMSJRNiCZelQvRO5vH7KivAkAdxwUwtxmhHLaAreMbl%2B1PmGERQAPtSU%2BKJ9AW7eA2xmjTfWDJp57qdxKyebytuCFhDyUPUdt8HMlyiZgIAaAN78Gql2af8CgldU%2BG%2BJ6xYCiuvY000sdYZCoczPCZpNOCFejleZhFme7aUZDQo%2BfYmcjnr4%2Fy87R2GxRQoYCRFVr5IRCjDCigfOGKQwxYyV20Zg%3D";
+        window.__genspark_locale = "en-US";
+        window.__genspark_token = "To/BnjzloZ3UfQdcSaYfDj8VTQqAmaxlrn5lMB+No5jjj4zcpmR1+owKOkS2r461FJ+YRwtVOIZuL+ssXFBwLsSnR9n0QtbO6nVh9mEE16uFt2InOm/2xnov0SL4Opd9g1+BPFJuk0Xuzl/mbXLFS0Rv5wBCALChzm8g66Vv2m2ms+IAlhRgxETvTwmK31zCmKowHcdI7hajYJ+6ZMBZESjYZApjZyr5S/mM0wn8ZFPkDHtMScvBeaQ9JOOjpnxNXtZQeVsBkvRXRgrC/JNSV6lSiAJ3ohKyBXvjVfFUfUAXRk+MY8pttUKGi3v+xDDFvEMlLiQd5uUTvxFSMSJRNiCZelQvRO5vH7KivAkAdxwUwtxmhHLaAreMbl+1PmGERQAPtSU+KJ9AW7eA2xmjTfWDJp57qdxKyebytuCFhDyUPUdt8HMlyiZgIAaAN78Gql2af8CgldU+G+J6xYCiuvY000sdYZCoczPCZpNOCFejleZhFme7aUZDQo+fYmcjnr4/y87R2GxRQoYCRFVr5IRCjDCigfOGKQwxYyV20Zg=";
+    </script>
+    
+    <script id="html_notice_dialog_script" src="https://www.genspark.ai/notice_dialog.js"></script>
+    
