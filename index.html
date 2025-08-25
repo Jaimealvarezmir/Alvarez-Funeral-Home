@@ -971,36 +971,19 @@ class GoogleSheetsManager {
         this.API_KEY = 'AIzaSyBPFBelwq2yXetoVFmu9Tcz_YB0pic9w6I';
         this.SPREADSHEET_ID = '1JBZt6XDnALFrRSBkaAwfZVfujj1YHq-lqfIYvQv7aic';
         this.DISCOVERY_DOC = 'https://sheets.googleapis.com/$discovery/rest?version=v4';
-        this.SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
         this.isInitialized = false;
-        this.gapi = null;
-
-        // Sheet configurations matching the exact structure
         this.sheets = {
-            'Case Data': {
-                name: 'Case Data',
-                range: 'Case Data!A:AC',
-                columns: ['Case ID', 'Name', 'Date 1', 'Start Time 1', 'End Time 1', 'Date 2', 'Start Time 2', 'End Time 2', 'Date 3', 'Start Time 3', 'End Time 3', 'EDRS #', 'File #', 'Medicaid', 'Service', 'Cremation', 'Chapel', 'Cemetery', 'Church', 'Casket', 'Vault', 'Contract Total ($)', 'Paid to Date ($)', 'Balance ($)', 'Payment Method', 'Payer Name', 'Payment Notes', 'Case Notes', 'Additional Notes']
-            },
-            'Forms Data': {
-                name: 'Forms Data',
-                range: 'Forms Data!A:J',
-                columns: ['Case ID', 'FTC Disclosure w/ GPL', 'Consent for Services', 'Transfer Authorization', 'Cremation Consent', 'Payment Agreement', 'Cremation Authorization', 'NYC Cremation Permit', 'Burial Forms', 'Medicaid Resource']
-            },
-            'Others Data': {
-                name: 'Others Data',
-                range: 'Others Data!A:T',
-                columns: ['Case ID', 'Casket Order', 'Church / Priest', 'Vault Order', 'Prayer Cards', 'TV Board/Slideshow', 'Logbook', 'Abstract', 'Work Excuse', 'Obituary', 'Grave Marker', 'VA/Flag', 'Cars', 'Transcripts', 'Shipping', 'Burial Transit Permit', 'Translations', 'Apostilles', 'Flight', 'Clothes']
-            }
+            'Case Data': { range: 'Case Data!A:AC' },
+            'Forms Data': { range: 'Forms Data!A:J' },
+            'Others Data': { range: 'Others Data!A:T' }
         };
     }
 
     async initialize() {
-        try {
-            // Load Google API
-            await this.loadGoogleAPI();
+        if (this.isInitialized) return true;
 
-            // Initialize gapi
+        try {
+            // Load the Google API client
             await new Promise((resolve, reject) => {
                 gapi.load('client', {
                     callback: resolve,
@@ -1008,7 +991,7 @@ class GoogleSheetsManager {
                 });
             });
 
-            // Initialize the client
+            // Initialize the client with proper error handling
             await gapi.client.init({
                 apiKey: this.API_KEY,
                 discoveryDocs: [this.DISCOVERY_DOC]
@@ -1019,41 +1002,22 @@ class GoogleSheetsManager {
             return true;
         } catch (error) {
             console.error('Failed to initialize Google Sheets API:', error);
-            return false;
+            throw new Error(`Google Sheets API initialization failed: ${error.message}`);
         }
-    }
-
-    loadGoogleAPI() {
-        return new Promise((resolve, reject) => {
-            if (window.gapi) {
-                resolve();
-                return;
-            }
-
-            const script = document.createElement('script');
-            script.src = 'https://apis.google.com/js/api.js';
-            script.onload = resolve;
-            script.onerror = reject;
-            document.head.appendChild(script);
-        });
     }
 
     async getAllCases() {
-        if (!this.isInitialized) {
-            const initialized = await this.initialize();
-            if (!initialized) return [];
-        }
-
         try {
+            await this.initialize();
+
             const response = await gapi.client.sheets.spreadsheets.values.get({
                 spreadsheetId: this.SPREADSHEET_ID,
                 range: this.sheets['Case Data'].range
             });
 
             const rows = response.result.values || [];
-            if (rows.length <= 1) return []; // No data or just headers
+            if (rows.length <= 1) return []; // No data or only headers
 
-            // Convert rows to objects
             const headers = rows[0];
             const cases = [];
 
@@ -1065,196 +1029,180 @@ class GoogleSheetsManager {
                     caseData[header] = row[index] || '';
                 });
 
-                cases.push(caseData);
+                // Only add non-empty cases
+                if (caseData.caseId || caseData.firstName || caseData.lastName) {
+                    cases.push(caseData);
+                }
             }
 
             return cases;
         } catch (error) {
-            console.error('Error loading cases:', error);
-            return [];
+            console.error('Error fetching cases from Google Sheets:', error);
+            if (error.status === 400) {
+                throw new Error('Invalid request to Google Sheets. Please check the spreadsheet ID and permissions.');
+            } else if (error.status === 403) {
+                throw new Error('Access denied to Google Sheets. Please check API key and permissions.');
+            } else if (error.status === 404) {
+                throw new Error('Spreadsheet not found. Please verify the spreadsheet ID.');
+            }
+            throw new Error(`Failed to load cases: ${error.message}`);
         }
     }
 
     async saveCase(caseData) {
-        if (!this.isInitialized) {
-            const initialized = await this.initialize();
-            if (!initialized) return false;
-        }
-
         try {
-            // Get all current cases to check if this is an update or new case
-            const allCases = await this.getAllCases();
-            const existingIndex = allCases.findIndex(c => c['Case ID'] === caseData['Case ID']);
+            await this.initialize();
+
+            // Generate timestamp
+            const timestamp = new Date().toISOString();
+            caseData.lastModified = timestamp;
+
+            // Ensure caseId exists
+            if (!caseData.caseId) {
+                caseData.caseId = `case_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            }
+
+            // Prepare data for all sheets
+            const caseRow = this.prepareCaseDataRow(caseData);
+            const formsRow = this.prepareFormsDataRow(caseData);
+            const othersRow = this.prepareOthersDataRow(caseData);
+
+            // Check if case already exists (for updates)
+            const existingCases = await this.getAllCases();
+            const existingIndex = existingCases.findIndex(c => c.caseId === caseData.caseId);
 
             if (existingIndex >= 0) {
                 // Update existing case
-                return await this.updateCase(caseData, existingIndex + 2); // +2 for header row and 0-based index
+                const rowIndex = existingIndex + 2; // +2 because of 0-based index and header row
+
+                await Promise.all([
+                    gapi.client.sheets.spreadsheets.values.update({
+                        spreadsheetId: this.SPREADSHEET_ID,
+                        range: `Case Data!A${rowIndex}:AC${rowIndex}`,
+                        valueInputOption: 'USER_ENTERED',
+                        resource: { values: [caseRow] }
+                    }),
+                    gapi.client.sheets.spreadsheets.values.update({
+                        spreadsheetId: this.SPREADSHEET_ID,
+                        range: `Forms Data!A${rowIndex}:J${rowIndex}`,
+                        valueInputOption: 'USER_ENTERED',
+                        resource: { values: [formsRow] }
+                    }),
+                    gapi.client.sheets.spreadsheets.values.update({
+                        spreadsheetId: this.SPREADSHEET_ID,
+                        range: `Others Data!A${rowIndex}:T${rowIndex}`,
+                        valueInputOption: 'USER_ENTERED',
+                        resource: { values: [othersRow] }
+                    })
+                ]);
             } else {
                 // Add new case
-                return await this.addNewCase(caseData);
+                await Promise.all([
+                    gapi.client.sheets.spreadsheets.values.append({
+                        spreadsheetId: this.SPREADSHEET_ID,
+                        range: 'Case Data!A:AC',
+                        valueInputOption: 'USER_ENTERED',
+                        resource: { values: [caseRow] }
+                    }),
+                    gapi.client.sheets.spreadsheets.values.append({
+                        spreadsheetId: this.SPREADSHEET_ID,
+                        range: 'Forms Data!A:J',
+                        valueInputOption: 'USER_ENTERED',
+                        resource: { values: [formsRow] }
+                    }),
+                    gapi.client.sheets.spreadsheets.values.append({
+                        spreadsheetId: this.SPREADSHEET_ID,
+                        range: 'Others Data!A:T',
+                        valueInputOption: 'USER_ENTERED',
+                        resource: { values: [othersRow] }
+                    })
+                ]);
             }
-        } catch (error) {
-            console.error('Error saving case:', error);
-            return false;
-        }
-    }
-
-    async addNewCase(caseData) {
-        try {
-            // Prepare row data for Case Data sheet
-            const caseRow = this.sheets['Case Data'].columns.map(column => caseData[column] || '');
-
-            // Add to Case Data sheet
-            await gapi.client.sheets.spreadsheets.values.append({
-                spreadsheetId: this.SPREADSHEET_ID,
-                range: 'Case Data!A:AC',
-                valueInputOption: 'USER_ENTERED',
-                resource: {
-                    values: [caseRow]
-                }
-            });
-
-            // Add to Forms Data sheet
-            const formsRow = this.sheets['Forms Data'].columns.map(column => {
-                if (column === 'Case ID') return caseData['Case ID'];
-                return caseData[column] || '';
-            });
-
-            await gapi.client.sheets.spreadsheets.values.append({
-                spreadsheetId: this.SPREADSHEET_ID,
-                range: 'Forms Data!A:J',
-                valueInputOption: 'USER_ENTERED',
-                resource: {
-                    values: [formsRow]
-                }
-            });
-
-            // Add to Others Data sheet
-            const othersRow = this.sheets['Others Data'].columns.map(column => {
-                if (column === 'Case ID') return caseData['Case ID'];
-                return caseData[column] || '';
-            });
-
-            await gapi.client.sheets.spreadsheets.values.append({
-                spreadsheetId: this.SPREADSHEET_ID,
-                range: 'Others Data!A:T',
-                valueInputOption: 'USER_ENTERED',
-                resource: {
-                    values: [othersRow]
-                }
-            });
 
             return true;
         } catch (error) {
-            console.error('Error adding new case:', error);
-            return false;
+            console.error('Error saving case to Google Sheets:', error);
+            if (error.status === 400) {
+                throw new Error('Bad request to Google Sheets. Please check data format.');
+            } else if (error.status === 403) {
+                throw new Error('Permission denied. Please check API key and sheet permissions.');
+            }
+            throw new Error(`Failed to save case: ${error.message}`);
         }
     }
 
-    async updateCase(caseData, rowIndex) {
-        try {
-            // Update Case Data sheet
-            const caseRow = this.sheets['Case Data'].columns.map(column => caseData[column] || '');
-
-            await gapi.client.sheets.spreadsheets.values.update({
-                spreadsheetId: this.SPREADSHEET_ID,
-                range: `Case Data!A${rowIndex}:AC${rowIndex}`,
-                valueInputOption: 'USER_ENTERED',
-                resource: {
-                    values: [caseRow]
-                }
-            });
-
-            // Update Forms Data sheet
-            const formsRow = this.sheets['Forms Data'].columns.map(column => {
-                if (column === 'Case ID') return caseData['Case ID'];
-                return caseData[column] || '';
-            });
-
-            await gapi.client.sheets.spreadsheets.values.update({
-                spreadsheetId: this.SPREADSHEET_ID,
-                range: `Forms Data!A${rowIndex}:J${rowIndex}`,
-                valueInputOption: 'USER_ENTERED',
-                resource: {
-                    values: [formsRow]
-                }
-            });
-
-            // Update Others Data sheet
-            const othersRow = this.sheets['Others Data'].columns.map(column => {
-                if (column === 'Case ID') return caseData['Case ID'];
-                return caseData[column] || '';
-            });
-
-            await gapi.client.sheets.spreadsheets.values.update({
-                spreadsheetId: this.SPREADSHEET_ID,
-                range: `Others Data!A${rowIndex}:T${rowIndex}`,
-                valueInputOption: 'USER_ENTERED',
-                resource: {
-                    values: [othersRow]
-                }
-            });
-
-            return true;
-        } catch (error) {
-            console.error('Error updating case:', error);
-            return false;
-        }
+    prepareCaseDataRow(caseData) {
+        return [
+            caseData.caseId || '',
+            caseData.firstName || '',
+            caseData.lastName || '',
+            caseData.middleName || '',
+            caseData.age || '',
+            caseData.dateOfBirth || '',
+            caseData.dateOfDeath || '',
+            caseData.ssn || '',
+            caseData.address || '',
+            caseData.city || '',
+            caseData.state || '',
+            caseData.zip || '',
+            caseData.phone || '',
+            caseData.email || '',
+            caseData.relationship || '',
+            caseData.nextOfKin || '',
+            caseData.nokPhone || '',
+            caseData.nokAddress || '',
+            caseData.serviceDate || '',
+            caseData.serviceTime || '',
+            caseData.serviceLocation || '',
+            caseData.burial || '',
+            caseData.burialLocation || '',
+            caseData.burialDate || '',
+            caseData.burialTime || '',
+            caseData.casket || '',
+            caseData.vault || '',
+            caseData.total || '',
+            caseData.lastModified || new Date().toISOString()
+        ];
     }
 
-    async deleteCase(caseId) {
-        if (!this.isInitialized) {
-            const initialized = await this.initialize();
-            if (!initialized) return false;
-        }
-
-        try {
-            // Find the row index for this case
-            const allCases = await this.getAllCases();
-            const caseIndex = allCases.findIndex(c => c['Case ID'] === caseId);
-
-            if (caseIndex === -1) return false;
-
-            const rowIndex = caseIndex + 2; // +2 for header row and 0-based index
-
-            // Delete from all three sheets
-            const sheets = ['Case Data', 'Forms Data', 'Others Data'];
-            const requests = sheets.map(sheetName => ({
-                deleteDimension: {
-                    range: {
-                        sheetId: 0, // We'll need to get the actual sheet IDs
-                        dimension: 'ROWS',
-                        startIndex: rowIndex - 1,
-                        endIndex: rowIndex
-                    }
-                }
-            }));
-
-            await gapi.client.sheets.spreadsheets.batchUpdate({
-                spreadsheetId: this.SPREADSHEET_ID,
-                resource: {
-                    requests: requests
-                }
-            });
-
-            return true;
-        } catch (error) {
-            console.error('Error deleting case:', error);
-            return false;
-        }
+    prepareFormsDataRow(caseData) {
+        return [
+            caseData.caseId || '',
+            caseData.deathCertificate || '',
+            caseData.burialPermit || '',
+            caseData.cremationAuthorization || '',
+            caseData.veteransDischarge || '',
+            caseData.socialSecurityClaim || '',
+            caseData.insuranceClaim || '',
+            caseData.preneedContract || '',
+            caseData.otherForms || '',
+            caseData.lastModified || new Date().toISOString()
+        ];
     }
 
-    async testConnection() {
-        try {
-            await this.initialize();
-            const response = await gapi.client.sheets.spreadsheets.get({
-                spreadsheetId: this.SPREADSHEET_ID
-            });
-            return response.result ? true : false;
-        } catch (error) {
-            console.error('Connection test failed:', error);
-            return false;
-        }
+    prepareOthersDataRow(caseData) {
+        return [
+            caseData.caseId || '',
+            caseData.flowers || '',
+            caseData.music || '',
+            caseData.officiant || '',
+            caseData.organist || '',
+            caseData.soloist || '',
+            caseData.pallbearers || '',
+            caseData.honoraryPallbearers || '',
+            caseData.memorialDonations || '',
+            caseData.obituary || '',
+            caseData.specialInstructions || '',
+            caseData.familyPreferences || '',
+            caseData.culturalRequirements || '',
+            caseData.religiousRequirements || '',
+            caseData.transportationNeeds || '',
+            caseData.accommodationNeeds || '',
+            caseData.mediaRequests || '',
+            caseData.photographyPermissions || '',
+            caseData.additionalServices || '',
+            caseData.lastModified || new Date().toISOString()
+        ];
     }
 }
 
@@ -1263,7 +1211,59 @@ const sheetsManager = new GoogleSheetsManager();
 
 
 // Modified loadCases function to use Google Sheets
-async function loadCases() {
+
+        // Missing helper functions for Google Sheets integration
+        function showNoCases() {
+            const casesSection = document.getElementById('cases');
+            if (casesSection) {
+                casesSection.innerHTML = `
+                    <div class="no-cases-message" style="
+                        text-align: center; 
+                        padding: 40px 20px; 
+                        color: #666; 
+                        font-size: 18px;
+                        background: #f9f9f9;
+                        border-radius: 8px;
+                        margin: 20px 0;
+                    ">
+                        <i class="fas fa-inbox" style="font-size: 48px; color: #ccc; margin-bottom: 20px; display: block;"></i>
+                        <h3 style="margin: 0 0 10px 0; color: #555;">No Cases Found</h3>
+                        <p style="margin: 0; color: #777;">No cases are currently stored in Google Sheets.</p>
+                        <p style="margin: 10px 0 0 0; color: #777;">Add a new case to get started.</p>
+                    </div>
+                `;
+            }
+        }
+
+        function updateCasesDisplay(cases) {
+            // Clear current localStorage and update with Google Sheets data
+            localStorage.clear();
+
+            // Convert Google Sheets data back to the local format
+            cases.forEach((caseData, index) => {
+                // Create a case ID if it doesn't exist
+                const caseId = caseData.caseId || `case_${Date.now()}_${index}`;
+
+                // Store the case data in localStorage in the expected format
+                const caseKey = `case-${caseId}`;
+                localStorage.setItem(caseKey, JSON.stringify(caseData));
+
+                // Store individual fields as expected by the existing system
+                Object.keys(caseData).forEach(field => {
+                    if (caseData[field] !== undefined && caseData[field] !== null) {
+                        localStorage.setItem(`${caseKey}-${field}`, caseData[field]);
+                    }
+                });
+            });
+
+            // Update the UI using the existing renderCases function
+            renderCases();
+
+            // Show success message
+            showSuccess(`Successfully loaded ${cases.length} case(s) from Google Sheets`);
+        }
+
+        async function loadCases() {
     try {
         showLoading(true);
         const cases = await sheetsManager.getAllCases();
@@ -1284,24 +1284,54 @@ async function loadCases() {
 }
 
 // Modified saveCase function to use Google Sheets
-async function saveCase(caseData) {
+async function saveCase(caseKey, fields) {
     try {
-        showLoading(true);
-        const success = await sheetsManager.saveCase(caseData);
+        // Save to localStorage (existing functionality)
+        Object.keys(fields).forEach(field => {
+            const value = fields[field];
+            if (value !== null && value !== undefined) {
+                localStorage.setItem(`${caseKey}-${field}`, value);
+            }
+        });
 
-        if (success) {
-            showSuccess('Case saved successfully!');
-            await loadCases(); // Reload to show updated data
-        } else {
-            showError('Failed to save case. Please try again.');
-        }
-        showLoading(false);
-        return success;
+        // Also save the complete case object
+        localStorage.setItem(caseKey, JSON.stringify(fields));
+
+        // Save to Google Sheets asynchronously (don't block the UI)
+        saveCaseToGoogleSheets(caseKey, fields).catch(error => {
+            console.error('Failed to save to Google Sheets:', error);
+            showError('Case saved locally, but failed to sync with Google Sheets: ' + error.message);
+        });
+
+        console.log(`Case ${caseKey} saved to localStorage`);
+        return true;
     } catch (error) {
         console.error('Error saving case:', error);
-        showError('Error saving case. Please check your connection.');
-        showLoading(false);
+        showError('Failed to save case: ' + error.message);
         return false;
+    }
+}
+
+// New function to save case data to Google Sheets
+async function saveCaseToGoogleSheets(caseKey, fields) {
+    try {
+        if (!window.sheetsManager) {
+            console.log('Google Sheets not available, skipping sync');
+            return;
+        }
+
+        // Prepare the case data for Google Sheets
+        const caseData = { ...fields };
+        caseData.caseId = caseKey.replace('case-', '');
+
+        await window.sheetsManager.saveCase(caseData);
+        console.log(`Case ${caseKey} saved to Google Sheets`);
+
+        // Show success notification
+        showSuccess('Case saved and synced to Google Sheets');
+    } catch (error) {
+        console.error('Error saving to Google Sheets:', error);
+        throw error; // Re-throw to be caught by the caller
     }
 }
 
@@ -1358,12 +1388,112 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log('❌ Google Sheets connection failed');
         showError('Failed to connect to Google Sheets. Please check your setup.');
     }
-});
+
+
+        // Initialize Google Sheets integration
+        try {
+            window.sheetsManager = new GoogleSheetsManager();
+            console.log('Google Sheets Manager initialized');
+
+            // Add load cases button functionality
+            const loadCasesBtn = document.getElementById('loadCasesBtn');
+            if (loadCasesBtn) {
+                loadCasesBtn.addEventListener('click', async () => {
+                    try {
+                        showLoading(true);
+                        await loadCases();
+                    } catch (error) {
+                        console.error('Error in load cases button:', error);
+                        showError('Failed to load cases: ' + error.message);
+                        showLoading(false);
+                    }
+                });
+            }
+
+            // Add sync all cases button functionality  
+            const syncCasesBtn = document.getElementById('syncCasesBtn');
+            if (syncCasesBtn) {
+                syncCasesBtn.addEventListener('click', async () => {
+                    try {
+                        showLoading(true);
+                        await syncAllCasesToGoogleSheets();
+                    } catch (error) {
+                        console.error('Error syncing cases:', error);
+                        showError('Failed to sync cases: ' + error.message);
+                        showLoading(false);
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('Failed to initialize Google Sheets integration:', error);
+            showError('Google Sheets integration not available. The system will work in local mode only.');
+        }
+        });
 
 // Override the original loadCases if it exists
 if (typeof window.loadCases !== 'undefined') {
     window.originalLoadCases = window.loadCases;
 }
 window.loadCases = loadCases;
+
+
+// Function to sync all local cases to Google Sheets
+async function syncAllCasesToGoogleSheets() {
+    try {
+        if (!window.sheetsManager) {
+            throw new Error('Google Sheets not initialized');
+        }
+
+        // Get all cases from localStorage
+        const cases = [];
+        const keys = Object.keys(localStorage);
+
+        for (const key of keys) {
+            if (key.startsWith('case-') && !key.includes('-')) {
+                try {
+                    const caseData = JSON.parse(localStorage.getItem(key));
+                    if (caseData && (caseData.firstName || caseData.lastName)) {
+                        caseData.caseId = key.replace('case-', '');
+                        cases.push(caseData);
+                    }
+                } catch (error) {
+                    console.error(`Error parsing case ${key}:`, error);
+                }
+            }
+        }
+
+        if (cases.length === 0) {
+            showError('No cases found to sync');
+            return;
+        }
+
+        // Sync each case
+        let successCount = 0;
+        let errorCount = 0;
+
+        for (const caseData of cases) {
+            try {
+                await window.sheetsManager.saveCase(caseData);
+                successCount++;
+            } catch (error) {
+                console.error(`Failed to sync case ${caseData.caseId}:`, error);
+                errorCount++;
+            }
+        }
+
+        // Show results
+        if (errorCount === 0) {
+            showSuccess(`Successfully synced ${successCount} case(s) to Google Sheets`);
+        } else {
+            showError(`Synced ${successCount} case(s), but ${errorCount} failed`);
+        }
+
+        showLoading(false);
+    } catch (error) {
+        console.error('Error syncing all cases:', error);
+        showError('Failed to sync cases: ' + error.message);
+        showLoading(false);
+    }
+}
 
 </script>
