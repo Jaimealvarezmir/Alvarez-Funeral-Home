@@ -952,7 +952,6 @@
     // Initialize
     firstRun();
   </script>
-<script defer src="https://static.cloudflareinsights.com/beacon.min.js/vcd15cbe7772f49c399c6a5babf22c1241717689176015" integrity="sha512-ZpsOmlRQV6y907TI0dKBHq9Md29nnaEIPlkf84rnaERnq6zvWvPUqr2ft8M1aS28oN72PdrCzSjY4U6VaAw1EQ==" data-cf-beacon='{"rayId":"9742b87d6fefdc28","serverTiming":{"name":{"cfExtPri":true,"cfEdge":true,"cfOrigin":true,"cfL4":true,"cfSpeedBrain":true,"cfCacheStatus":true}},"version":"2025.8.0","token":"4edd5f8ec12a48cfa682ab8261b80a79"}' crossorigin="anonymous"></script>
 </body>
 </html>
     <script id="html_badge_script1">
@@ -964,3 +963,407 @@
     
     <script id="html_notice_dialog_script" src="https://www.genspark.ai/notice_dialog.js"></script>
     
+<script>
+
+// Google Sheets Integration for Alvarez Funeral Home
+class GoogleSheetsManager {
+    constructor() {
+        this.API_KEY = 'AIzaSyBPFBelwq2yXetoVFmu9Tcz_YB0pic9w6I';
+        this.SPREADSHEET_ID = '1JBZt6XDnALFrRSBkaAwfZVfujj1YHq-lqfIYvQv7aic';
+        this.DISCOVERY_DOC = 'https://sheets.googleapis.com/$discovery/rest?version=v4';
+        this.SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
+        this.isInitialized = false;
+        this.gapi = null;
+
+        // Sheet configurations matching the exact structure
+        this.sheets = {
+            'Case Data': {
+                name: 'Case Data',
+                range: 'Case Data!A:AC',
+                columns: ['Case ID', 'Name', 'Date 1', 'Start Time 1', 'End Time 1', 'Date 2', 'Start Time 2', 'End Time 2', 'Date 3', 'Start Time 3', 'End Time 3', 'EDRS #', 'File #', 'Medicaid', 'Service', 'Cremation', 'Chapel', 'Cemetery', 'Church', 'Casket', 'Vault', 'Contract Total ($)', 'Paid to Date ($)', 'Balance ($)', 'Payment Method', 'Payer Name', 'Payment Notes', 'Case Notes', 'Additional Notes']
+            },
+            'Forms Data': {
+                name: 'Forms Data',
+                range: 'Forms Data!A:J',
+                columns: ['Case ID', 'FTC Disclosure w/ GPL', 'Consent for Services', 'Transfer Authorization', 'Cremation Consent', 'Payment Agreement', 'Cremation Authorization', 'NYC Cremation Permit', 'Burial Forms', 'Medicaid Resource']
+            },
+            'Others Data': {
+                name: 'Others Data',
+                range: 'Others Data!A:T',
+                columns: ['Case ID', 'Casket Order', 'Church / Priest', 'Vault Order', 'Prayer Cards', 'TV Board/Slideshow', 'Logbook', 'Abstract', 'Work Excuse', 'Obituary', 'Grave Marker', 'VA/Flag', 'Cars', 'Transcripts', 'Shipping', 'Burial Transit Permit', 'Translations', 'Apostilles', 'Flight', 'Clothes']
+            }
+        };
+    }
+
+    async initialize() {
+        try {
+            // Load Google API
+            await this.loadGoogleAPI();
+
+            // Initialize gapi
+            await new Promise((resolve, reject) => {
+                gapi.load('client', {
+                    callback: resolve,
+                    onerror: reject
+                });
+            });
+
+            // Initialize the client
+            await gapi.client.init({
+                apiKey: this.API_KEY,
+                discoveryDocs: [this.DISCOVERY_DOC]
+            });
+
+            this.isInitialized = true;
+            console.log('Google Sheets API initialized successfully');
+            return true;
+        } catch (error) {
+            console.error('Failed to initialize Google Sheets API:', error);
+            return false;
+        }
+    }
+
+    loadGoogleAPI() {
+        return new Promise((resolve, reject) => {
+            if (window.gapi) {
+                resolve();
+                return;
+            }
+
+            const script = document.createElement('script');
+            script.src = 'https://apis.google.com/js/api.js';
+            script.onload = resolve;
+            script.onerror = reject;
+            document.head.appendChild(script);
+        });
+    }
+
+    async getAllCases() {
+        if (!this.isInitialized) {
+            const initialized = await this.initialize();
+            if (!initialized) return [];
+        }
+
+        try {
+            const response = await gapi.client.sheets.spreadsheets.values.get({
+                spreadsheetId: this.SPREADSHEET_ID,
+                range: this.sheets['Case Data'].range
+            });
+
+            const rows = response.result.values || [];
+            if (rows.length <= 1) return []; // No data or just headers
+
+            // Convert rows to objects
+            const headers = rows[0];
+            const cases = [];
+
+            for (let i = 1; i < rows.length; i++) {
+                const row = rows[i];
+                const caseData = {};
+
+                headers.forEach((header, index) => {
+                    caseData[header] = row[index] || '';
+                });
+
+                cases.push(caseData);
+            }
+
+            return cases;
+        } catch (error) {
+            console.error('Error loading cases:', error);
+            return [];
+        }
+    }
+
+    async saveCase(caseData) {
+        if (!this.isInitialized) {
+            const initialized = await this.initialize();
+            if (!initialized) return false;
+        }
+
+        try {
+            // Get all current cases to check if this is an update or new case
+            const allCases = await this.getAllCases();
+            const existingIndex = allCases.findIndex(c => c['Case ID'] === caseData['Case ID']);
+
+            if (existingIndex >= 0) {
+                // Update existing case
+                return await this.updateCase(caseData, existingIndex + 2); // +2 for header row and 0-based index
+            } else {
+                // Add new case
+                return await this.addNewCase(caseData);
+            }
+        } catch (error) {
+            console.error('Error saving case:', error);
+            return false;
+        }
+    }
+
+    async addNewCase(caseData) {
+        try {
+            // Prepare row data for Case Data sheet
+            const caseRow = this.sheets['Case Data'].columns.map(column => caseData[column] || '');
+
+            // Add to Case Data sheet
+            await gapi.client.sheets.spreadsheets.values.append({
+                spreadsheetId: this.SPREADSHEET_ID,
+                range: 'Case Data!A:AC',
+                valueInputOption: 'USER_ENTERED',
+                resource: {
+                    values: [caseRow]
+                }
+            });
+
+            // Add to Forms Data sheet
+            const formsRow = this.sheets['Forms Data'].columns.map(column => {
+                if (column === 'Case ID') return caseData['Case ID'];
+                return caseData[column] || '';
+            });
+
+            await gapi.client.sheets.spreadsheets.values.append({
+                spreadsheetId: this.SPREADSHEET_ID,
+                range: 'Forms Data!A:J',
+                valueInputOption: 'USER_ENTERED',
+                resource: {
+                    values: [formsRow]
+                }
+            });
+
+            // Add to Others Data sheet
+            const othersRow = this.sheets['Others Data'].columns.map(column => {
+                if (column === 'Case ID') return caseData['Case ID'];
+                return caseData[column] || '';
+            });
+
+            await gapi.client.sheets.spreadsheets.values.append({
+                spreadsheetId: this.SPREADSHEET_ID,
+                range: 'Others Data!A:T',
+                valueInputOption: 'USER_ENTERED',
+                resource: {
+                    values: [othersRow]
+                }
+            });
+
+            return true;
+        } catch (error) {
+            console.error('Error adding new case:', error);
+            return false;
+        }
+    }
+
+    async updateCase(caseData, rowIndex) {
+        try {
+            // Update Case Data sheet
+            const caseRow = this.sheets['Case Data'].columns.map(column => caseData[column] || '');
+
+            await gapi.client.sheets.spreadsheets.values.update({
+                spreadsheetId: this.SPREADSHEET_ID,
+                range: `Case Data!A${rowIndex}:AC${rowIndex}`,
+                valueInputOption: 'USER_ENTERED',
+                resource: {
+                    values: [caseRow]
+                }
+            });
+
+            // Update Forms Data sheet
+            const formsRow = this.sheets['Forms Data'].columns.map(column => {
+                if (column === 'Case ID') return caseData['Case ID'];
+                return caseData[column] || '';
+            });
+
+            await gapi.client.sheets.spreadsheets.values.update({
+                spreadsheetId: this.SPREADSHEET_ID,
+                range: `Forms Data!A${rowIndex}:J${rowIndex}`,
+                valueInputOption: 'USER_ENTERED',
+                resource: {
+                    values: [formsRow]
+                }
+            });
+
+            // Update Others Data sheet
+            const othersRow = this.sheets['Others Data'].columns.map(column => {
+                if (column === 'Case ID') return caseData['Case ID'];
+                return caseData[column] || '';
+            });
+
+            await gapi.client.sheets.spreadsheets.values.update({
+                spreadsheetId: this.SPREADSHEET_ID,
+                range: `Others Data!A${rowIndex}:T${rowIndex}`,
+                valueInputOption: 'USER_ENTERED',
+                resource: {
+                    values: [othersRow]
+                }
+            });
+
+            return true;
+        } catch (error) {
+            console.error('Error updating case:', error);
+            return false;
+        }
+    }
+
+    async deleteCase(caseId) {
+        if (!this.isInitialized) {
+            const initialized = await this.initialize();
+            if (!initialized) return false;
+        }
+
+        try {
+            // Find the row index for this case
+            const allCases = await this.getAllCases();
+            const caseIndex = allCases.findIndex(c => c['Case ID'] === caseId);
+
+            if (caseIndex === -1) return false;
+
+            const rowIndex = caseIndex + 2; // +2 for header row and 0-based index
+
+            // Delete from all three sheets
+            const sheets = ['Case Data', 'Forms Data', 'Others Data'];
+            const requests = sheets.map(sheetName => ({
+                deleteDimension: {
+                    range: {
+                        sheetId: 0, // We'll need to get the actual sheet IDs
+                        dimension: 'ROWS',
+                        startIndex: rowIndex - 1,
+                        endIndex: rowIndex
+                    }
+                }
+            }));
+
+            await gapi.client.sheets.spreadsheets.batchUpdate({
+                spreadsheetId: this.SPREADSHEET_ID,
+                resource: {
+                    requests: requests
+                }
+            });
+
+            return true;
+        } catch (error) {
+            console.error('Error deleting case:', error);
+            return false;
+        }
+    }
+
+    async testConnection() {
+        try {
+            await this.initialize();
+            const response = await gapi.client.sheets.spreadsheets.get({
+                spreadsheetId: this.SPREADSHEET_ID
+            });
+            return response.result ? true : false;
+        } catch (error) {
+            console.error('Connection test failed:', error);
+            return false;
+        }
+    }
+}
+
+// Initialize the Google Sheets manager
+const sheetsManager = new GoogleSheetsManager();
+
+
+// Modified loadCases function to use Google Sheets
+async function loadCases() {
+    try {
+        showLoading(true);
+        const cases = await sheetsManager.getAllCases();
+
+        if (cases.length === 0) {
+            showNoCases();
+            return;
+        }
+
+        // Update the existing UI with loaded cases
+        updateCasesDisplay(cases);
+        showLoading(false);
+    } catch (error) {
+        console.error('Error loading cases:', error);
+        showError('Error loading cases. Please check your connection.');
+        showLoading(false);
+    }
+}
+
+// Modified saveCase function to use Google Sheets
+async function saveCase(caseData) {
+    try {
+        showLoading(true);
+        const success = await sheetsManager.saveCase(caseData);
+
+        if (success) {
+            showSuccess('Case saved successfully!');
+            await loadCases(); // Reload to show updated data
+        } else {
+            showError('Failed to save case. Please try again.');
+        }
+        showLoading(false);
+        return success;
+    } catch (error) {
+        console.error('Error saving case:', error);
+        showError('Error saving case. Please check your connection.');
+        showLoading(false);
+        return false;
+    }
+}
+
+// Helper functions for UI updates
+function showLoading(show) {
+    const loadingDiv = document.getElementById('loading-indicator') || createLoadingIndicator();
+    loadingDiv.style.display = show ? 'block' : 'none';
+}
+
+function createLoadingIndicator() {
+    const loadingDiv = document.createElement('div');
+    loadingDiv.id = 'loading-indicator';
+    loadingDiv.className = 'fixed top-4 right-4 bg-blue-500 text-white p-3 rounded-lg shadow-lg z-50';
+    loadingDiv.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Syncing with Google Sheets...';
+    document.body.appendChild(loadingDiv);
+    return loadingDiv;
+}
+
+function showSuccess(message) {
+    showNotification(message, 'success');
+}
+
+function showError(message) {
+    showNotification(message, 'error');
+}
+
+function showNotification(message, type) {
+    const notification = document.createElement('div');
+    notification.className = `fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50 ${
+        type === 'success' ? 'bg-green-500' : 'bg-red-500'
+    } text-white`;
+    notification.innerHTML = `<i class="fas ${
+        type === 'success' ? 'fa-check' : 'fa-exclamation-triangle'
+    } mr-2"></i>${message}`;
+
+    document.body.appendChild(notification);
+
+    setTimeout(() => {
+        notification.remove();
+    }, 5000);
+}
+
+// Test Google Sheets connection on page load
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log('Testing Google Sheets connection...');
+    const connected = await sheetsManager.testConnection();
+
+    if (connected) {
+        console.log('✅ Google Sheets connected successfully');
+        showSuccess('Connected to Google Sheets');
+        // Load cases after successful connection
+        await loadCases();
+    } else {
+        console.log('❌ Google Sheets connection failed');
+        showError('Failed to connect to Google Sheets. Please check your setup.');
+    }
+});
+
+// Override the original loadCases if it exists
+if (typeof window.loadCases !== 'undefined') {
+    window.originalLoadCases = window.loadCases;
+}
+window.loadCases = loadCases;
+
+</script>
